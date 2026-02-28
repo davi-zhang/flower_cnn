@@ -1,6 +1,4 @@
-import time
-from pathlib import Path
-
+import os
 import torch
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
@@ -8,67 +6,113 @@ from torch.utils.tensorboard import SummaryWriter
 from datasets.flower_dataset import FlowerDataset
 from datasets.transforms import get_train_transforms, get_val_transforms
 from models.flower_model import FlowerModel
-from training.utils import accuracy, save_checkpoint
+from training.utils import accuracy
+
+
+class EarlyStopping:
+    def __init__(self, patience: int = 5, delta: float = 0.0) -> None:
+        self.patience = patience
+        self.delta = delta
+        self.best_loss = float("inf")
+        self.counter = 0
+        self.early_stop = False
+
+    def __call__(self, val_loss: float) -> None:
+        if val_loss < self.best_loss - self.delta:
+            self.best_loss = val_loss
+            self.counter = 0
+        else:
+            self.counter += 1
+            if self.counter >= self.patience:
+                self.early_stop = True
 
 
 def train(
     root_dir: str = "data/processed/visible",
     train_ann: str = "data/annotations/train_visible.txt",
     val_ann: str = "data/annotations/val_visible.txt",
-    epochs: int = 10,
+    epochs: int = 50,
     batch_size: int = 32,
     lr: float = 1e-3,
-    log_dir: str = "training/logs/visible",
 ) -> None:
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    train_ds = FlowerDataset(
+        root_dir=root_dir,
+        annotations=train_ann,
+        transform=get_train_transforms(),
+    )
+    val_ds = FlowerDataset(
+        root_dir=root_dir,
+        annotations=val_ann,
+        transform=get_val_transforms(),
+    )
 
-    train_ds = FlowerDataset(root_dir=root_dir, annotations=train_ann, transform=get_train_transforms())
-    val_ds = FlowerDataset(root_dir=root_dir, annotations=val_ann, transform=get_val_transforms())
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_ds, batch_size=batch_size)
 
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
-    val_loader = DataLoader(val_ds, batch_size=batch_size, num_workers=2, pin_memory=True)
-
-    model = FlowerModel(num_classes=10).to(device)
+    model = FlowerModel(num_classes=10)
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=2)
 
-    log_path = Path(log_dir)
-    log_path.mkdir(parents=True, exist_ok=True)
-    writer = SummaryWriter(log_dir=str(log_path))
+    log_dir = os.path.join("experiments", "logs", "tensorboard")
+    writer = SummaryWriter(log_dir)
 
-    start_time = time.time()
-    for epoch in range(1, epochs + 1):
+    early_stopper = EarlyStopping(patience=5)
+
+    best_acc = 0.0
+    best_model_path = os.path.join("experiments", "checkpoints", "best_visible.pth")
+    os.makedirs(os.path.dirname(best_model_path), exist_ok=True)
+
+    for epoch in range(epochs):
         model.train()
-        running_loss = 0.0
+        train_loss_total = 0.0
+
         for imgs, labels in train_loader:
-            imgs, labels = imgs.to(device), labels.to(device)
-            optimizer.zero_grad()
             out = model(imgs)
             loss = criterion(out, labels)
+
+            optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            running_loss += loss.item() * imgs.size(0)
 
-        avg_loss = running_loss / len(train_loader.dataset)
-        print(f"Epoch {epoch:02d} | train loss {avg_loss:.4f}")
-        writer.add_scalar("train/loss", avg_loss, epoch)
-        writer.add_scalar("train/lr", optimizer.param_groups[0]["lr"], epoch)
+            train_loss_total += loss.item()
+
+        avg_train_loss = train_loss_total / len(train_loader)
 
         model.eval()
-        val_acc = 0.0
+        val_loss_total = 0.0
+        accs = []
+
         with torch.no_grad():
             for imgs, labels in val_loader:
-                imgs, labels = imgs.to(device), labels.to(device)
                 out = model(imgs)
-                val_acc += accuracy(out, labels) * imgs.size(0)
-        val_acc /= len(val_loader.dataset)
-        print(f"Epoch {epoch:02d} | val acc {val_acc:.4f}")
-        writer.add_scalar("val/accuracy", val_acc, epoch)
+                loss = criterion(out, labels)
+                val_loss_total += loss.item()
+                accs.append(accuracy(out, labels))
 
-        save_checkpoint(model, f"experiments/logs/visible_epoch{epoch:02d}.pth")
+        avg_val_loss = val_loss_total / len(val_loader)
+        avg_val_acc = sum(accs) / len(accs)
 
-    duration = time.time() - start_time
-    print(f"Training finished in {duration/60:.2f} minutes")
+        writer.add_scalar("Loss/train", avg_train_loss, epoch)
+        writer.add_scalar("Loss/val", avg_val_loss, epoch)
+        writer.add_scalar("Accuracy/val", avg_val_acc, epoch)
+
+        scheduler.step(avg_val_loss)
+
+        if avg_val_acc > best_acc:
+            best_acc = avg_val_acc
+            torch.save(model.state_dict(), best_model_path)
+            print(f"Epoch {epoch}: New best model saved! Acc={best_acc:.4f}")
+
+        early_stopper(avg_val_loss)
+        if early_stopper.early_stop:
+            print(f"Early stopping at epoch {epoch}")
+            break
+
+        print(
+            f"Epoch {epoch} | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f} | Val Acc: {avg_val_acc:.4f}"
+        )
+
     writer.close()
 
 
