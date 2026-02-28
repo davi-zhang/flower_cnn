@@ -18,7 +18,7 @@
 
 ## Monitoring
 
-[training/train_visible.py](training/train_visible.py) writes TensorBoard summaries to [training/logs/visible](training/logs/visible). Start `tensorboard --logdir training/logs/visible --host 0.0.0.0 --port 6006` and open http://localhost:6006 to track losses and accuracy for each run.
+[training/train_visible.py](training/train_visible.py), [train_ir.py](train_ir.py), and [train_multimodal.py](train_multimodal.py) all write TensorBoard summaries under `experiments/logs/`. Start `tensorboard --logdir experiments/logs --host 0.0.0.0 --port 6006` and open http://localhost:6006 to compare modality-specific runs.
 
 ## Experiments
 
@@ -31,6 +31,13 @@
 
 - `web/` contains a minimal backend/frontend for demoing models. Put serialization code in `web/backend/`, static assets in `web/frontend/`, and templates in `web/templates/`.
 - The `model_web/` folder can host API wrappers or Flask/Django apps that integrate with the trained models.
+
+## Scripts
+
+1. `train_ir.py` mirrors `train_visible.py` but focuses on the infrared split (`data/processed/ir` and `data/annotations/*_ir.txt`). It uses `ReduceLROnPlateau`, TensorBoard (`experiments/logs/ir`), and `experiments/checkpoints/best_ir.pth` for the best weights.
+2. `train_multimodal.py` learns from paired visible/IR annotations (CSV lines per example: `vis.jpg,ir.jpg,label`) and the fusion model in `models/multi_modal.py`; it logs to `experiments/logs/multimodal` and saves `best_multimodal.pth`.
+3. `inference.py` runs a single image through a visible or infrared model or pairs through the multimodal fusion checkpoint. Use `--mode` to switch, provide `--checkpoint`, and pass `--image`/`--vis-image` + `--ir-image` accordingly.
+4. `export_onnx.py` bundles `models/flower_model.py` into an ONNX asset (`models/flower_model.onnx`) that matches the trained checkpoint and exposes dynamic batch size support.
 
 ## Manual Demo
 
