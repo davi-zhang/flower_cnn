@@ -12,9 +12,13 @@
 
 ## Usage
 
-- **Training:** Use the scripts under `training/` to start a run. Look for entry points such as `training/train.py` (you may need to create one) and pass config files or CLI args describing the model, dataset path, and hyperparameters.
+- **Training:** Use [training/train_visible.py](training/train_visible.py) to start a run. Pass config files or CLI args describing the model, dataset path, and hyperparameters if you extend that entry point.
 - **Evaluation:** Use `experiments/` to score checkpoints. For example, you can write a script under `experiments/ablation/` that loads a model from `models/` and runs inference on a validation split.
 - **Logging:** Outputs, checkpoints, and metrics go into `training/logs/` and `experiments/logs/`. Keep each run in a timestamped subdirectory.
+
+## Monitoring
+
+[training/train_visible.py](training/train_visible.py) writes TensorBoard summaries to [training/logs/visible](training/logs/visible). Start `tensorboard --logdir training/logs/visible --host 0.0.0.0 --port 6006` and open http://localhost:6006 to track losses and accuracy for each run.
 
 ## Experiments
 
@@ -27,6 +31,12 @@
 
 - `web/` contains a minimal backend/frontend for demoing models. Put serialization code in `web/backend/`, static assets in `web/frontend/`, and templates in `web/templates/`.
 - The `model_web/` folder can host API wrappers or Flask/Django apps that integrate with the trained models.
+
+## Manual Demo
+
+1. Drop a checkpoint at [model_web/model.pth](model_web/model.pth) so [web/backend/inference.py](web/backend/inference.py) can load it.
+2. Launch the Flask server from the repo root with `FLASK_APP=web.backend.app flask run --host 0.0.0.0 --port 5000` so [web/backend/app.py](web/backend/app.py) serves both `/predict` and the UI.
+3. Open http://localhost:5000 in a browser to render [web/frontend/index.html](web/frontend/index.html), upload a flower image, and inspect the prediction returned by `/predict`.
 
 ## Contributing
 

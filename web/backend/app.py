@@ -1,14 +1,22 @@
-from flask import Flask, jsonify, request
+from pathlib import Path
 
-from inference import load_model, predict
+from flask import Flask, jsonify, request, send_from_directory
 
+from web.backend.inference import load_model, predict
 
-app = Flask(__name__)
+FRONTEND_DIR = Path(__file__).resolve().parents[1] / "frontend"
+
+app = Flask(__name__, static_folder=None)
 model = load_model()
 
 
+@app.route("/", methods=["GET"])
+def serve_frontend():
+    return send_from_directory(FRONTEND_DIR, "index.html")
+
+
 @app.route("/predict", methods=["POST"])
-def predict_api() -> tuple[dict, int]:
+def predict_api():
     if "image" not in request.files:
         return jsonify({"error": "image file missing"}), 400
 
