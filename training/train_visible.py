@@ -51,8 +51,8 @@ def train(
 
         avg_loss = running_loss / len(train_loader.dataset)
         print(f"Epoch {epoch:02d} | train loss {avg_loss:.4f}")
-    writer.add_scalar("train/loss", avg_loss, epoch)
-    writer.add_scalar("train/lr", optimizer.param_groups[0]["lr"], epoch)
+        writer.add_scalar("train/loss", avg_loss, epoch)
+        writer.add_scalar("train/lr", optimizer.param_groups[0]["lr"], epoch)
 
         model.eval()
         val_acc = 0.0

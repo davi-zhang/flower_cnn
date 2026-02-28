@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 
 
@@ -14,6 +15,6 @@ class SEBlock(nn.Module):
             nn.Sigmoid(),
         )
 
-    def forward(self, x: nn.Tensor) -> nn.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         weights = self.fc(x).view(x.size(0), x.size(1), 1, 1)
         return x * weights
