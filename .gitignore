@@ -1,0 +1,5 @@
+# Ignore downloaded dataset artifacts
+/data_source/
+# Ignore processed/annotated outputs
+/data/raw/
+/data/annotations/

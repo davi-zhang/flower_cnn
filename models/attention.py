@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 
+# 通道注意力模块（SEBlock）：为特征图生成通道权重
+
 
 class SEBlock(nn.Module):
     def __init__(self, channels: int, reduction: int = 16) -> None:
